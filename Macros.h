@@ -1,27 +1,40 @@
-#import <mach/mach_time.h>  // for mach_absolute_time() and friends
-                            // adapted from http://blog.bignerdranch.com/316-a-timing-utility/
+#pragma mark -
+#pragma mark Lock
+#define LOCK(...) dispatch_semaphore_wait(_lock, DISPATCH_TIME_FOREVER); \
+__VA_ARGS__; \
+dispatch_semaphore_signal(_lock);
+
+
+#pragma mark -
+#pragma mark NSNotifications
+
+#define POST_NOTIFICATION_ON_MAIN( __name, __object, __userInfo ) { \
+dispatch_async(dispatch_get_main_queue(), ^{ \
+[[NSNotificationCenter defaultCenter] postNotificationName:__name object:__object userInfo:__userInfo]; \
+}); \
+}
 
 #import <CoreGraphics/CGBase.h>
 
 // Adapted from Will Shipley http://blog.wilshipley.com/2005/10/pimp-my-code-interlude-free-code.html
 static inline BOOL IsEmpty(id thing) {
     return thing == nil || [thing isEqual:[NSNull null]]
-        || ([thing respondsToSelector:@selector(length)]
+    || ([thing respondsToSelector:@selector(length)]
         && [(NSData *)thing length] == 0)
-        || ([thing respondsToSelector:@selector(count)]
+    || ([thing respondsToSelector:@selector(count)]
         && [(NSArray *)thing count] == 0);
 }
 
 static inline NSString *StringFromObject(id object) {
-	if (object == nil || [object isEqual:[NSNull null]]) {
-		return @"";
-	} else if ([object isKindOfClass:[NSString class]]) {
-		return object;
-	} else if ([object respondsToSelector:@selector(stringValue)]){
-		return [object stringValue];
-	} else {
-		return [object description];
-	}
+    if (object == nil || [object isEqual:[NSNull null]]) {
+        return @"";
+    } else if ([object isKindOfClass:[NSString class]]) {
+        return object;
+    } else if ([object respondsToSelector:@selector(stringValue)]){
+        return [object stringValue];
+    } else {
+        return [object description];
+    }
 }
 
 #pragma mark -
@@ -84,10 +97,10 @@ static inline NSDictionary *DictionaryWithIDArray(id *array, NSUInteger count) {
 #define LOG(fmt, ...) NSLog(@"%s: " fmt, __PRETTY_FUNCTION__, ## __VA_ARGS__)
 
 #ifdef DEBUG
-    #define INFO(fmt, ...) LOG(fmt, ## __VA_ARGS__)
+#define INFO(fmt, ...) LOG(fmt, ## __VA_ARGS__)
 #else
-    // do nothing
-    #define INFO(fmt, ...) 
+// do nothing
+#define INFO(fmt, ...)
 #endif
 
 #define ERROR(fmt, ...) LOG(fmt, ## __VA_ARGS__)
@@ -119,8 +132,8 @@ static inline NSDictionary *DictionaryWithIDArray(id *array, NSUInteger count) {
 #define Y(view) view.frame.origin.y
 #define LEFT(view) view.frame.origin.x
 #define TOP(view) view.frame.origin.y
-#define BOTTOM(view) (view.frame.origin.y + view.frame.size.height) 
-#define RIGHT(view) (view.frame.origin.x + view.frame.size.width) 
+#define BOTTOM(view) (view.frame.origin.y + view.frame.size.height)
+#define RIGHT(view) (view.frame.origin.x + view.frame.size.width)
 
 #pragma mark -
 #pragma mark IndexPath
@@ -131,39 +144,29 @@ static inline NSDictionary *DictionaryWithIDArray(id *array, NSUInteger count) {
 #define NEVER_TRUE NO &&
 
 #pragma mark -
-#pragma mark Screen size
-
-#define SCREEN_WIDTH [[UIScreen mainScreen] bounds].size.width
-#define SCREEN_HEIGHT [[UIScreen mainScreen] bounds].size.height
-
-#pragma mark -
-#pragma mark Device type. 
+#pragma mark Device type
 // Corresponds to "Targeted device family" in project settings
-// Universal apps will return true for whichever device they're on. 
+// Universal apps will return true for whichever device they're on.
 // iPhone apps will return true for iPhone even if run on iPad.
 
 #define TARGETED_DEVICE_IS_IPAD UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad
 #define TARGETED_DEVICE_IS_IPHONE UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone
 #define TARGETED_DEVICE_IS_IPHONE_568 TARGETED_DEVICE_IS_IPHONE && SCREEN_HEIGHT == 568
+#define TARGETED_DEVICE_IS_IPHONE_812 TARGETED_DEVICE_IS_IPHONE && SCREEN_HEIGHT == 812
+
+
+#pragma mark -
+#pragma mark Common UI size
+
+#define SCREEN_WIDTH [[UIScreen mainScreen] bounds].size.width
+#define SCREEN_HEIGHT [[UIScreen mainScreen] bounds].size.height
+#define STATUS_BAR_HEIGHT (TARGETED_DEVICE_IS_IPHONE_812 ? 44.f : 20.f)
+#define NAVIGATION_BAR_HEIGHT  44.f
+#define TAB_BAR_SAFE_BOTTOM_MARGIN (TARGETED_DEVICE_IS_IPHONE_812 ? 34.f : 0.f)
+#define TAB_BAR_HEIGHT (49.f + TAB_BAR_SAFE_BOTTOM_MARGIN)
+#define VIEW_SAFE_AREA_INSETS(view) ({UIEdgeInsets insets; if(@available(iOS 11.0, *)) {insets = view.safeAreaInsets;} else {insets = UIEdgeInsetsZero;} insets;})
 
 #pragma mark -
 #pragma mark Transforms
 
 #define DEGREES_TO_RADIANS(degrees) degrees * M_PI / 180
-
-static inline void TimeThisBlock (void (^block)(void), NSString *message) {
-    mach_timebase_info_data_t info;
-    if (mach_timebase_info(&info) != KERN_SUCCESS) {
-        block();
-        return;
-    };
-    
-    uint64_t start = mach_absolute_time ();
-    block ();
-    uint64_t end = mach_absolute_time ();
-    uint64_t elapsed = end - start;
-    
-    uint64_t nanos = elapsed * info.numer / info.denom;
-    LOG(@"Took %f seconds to %@", (CGFloat)nanos / NSEC_PER_SEC, message);
-}
-
